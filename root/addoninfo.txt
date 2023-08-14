@@ -1,0 +1,9 @@
+"AddonInfo"
+{
+  addonSteamAppID   	550
+  addontitle		"Left 4 GPT"
+  addonversion	    	"1.0"
+  addonauthor 	   	"smilzo"
+  addonDescription  	"Make the survivor bots chat using ChatGPT"
+  addonContent_Script 	1
+}
