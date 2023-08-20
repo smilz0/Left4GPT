@@ -1,6 +1,10 @@
 # Left 4 GPT
 This was just a test with the ChatGPT API. It makes the L4D2 survivor bots talk with you via chat.
 
+Here you can see it in action:
+
+https://www.youtube.com/watch?v=as2hVSjyxQs
+
 ***NOTE: This addon requires an external program to run on the L4D2 server in order to make the bots talk.***
 
 [THIS PROGRAM](https://github.com/smilz0/Dot4GPT)
