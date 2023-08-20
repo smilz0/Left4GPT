@@ -45,3 +45,5 @@ min_user_level = 1 // Friend
 loglevel = 3
 ```
 You can edit this file to change the settings.
+
+More info can be found on the [DotGPT GitHub Repository](https://github.com/smilz0/Dot4GPT).
