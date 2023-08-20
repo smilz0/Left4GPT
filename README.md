@@ -4,6 +4,7 @@ This was just a test with the ChatGPT API. It makes the L4D2 survivor bots talk 
 Here you can see it in action:
 
 https://www.youtube.com/watch?v=as2hVSjyxQs
+
 https://www.youtube.com/watch?v=WfKeQNPIYVI
 
 ***NOTE: This addon requires an external program to run on the L4D2 server in order to make the bots talk.***
