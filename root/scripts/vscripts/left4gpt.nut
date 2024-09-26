@@ -9,6 +9,8 @@ if (!IncludeScript("left4lib_users"))
 	error("[L4GPT][ERROR] Failed to include 'left4lib_users', please make sure the 'Left 4 Lib' addon is installed and enabled!\n");
 if (!IncludeScript("left4lib_timers"))
 	error("[L4GPT][ERROR] Failed to include 'left4lib_timers', please make sure the 'Left 4 Lib' addon is installed and enabled!\n");
+if (!IncludeScript("left4lib_concepts"))
+	error("[L4B][ERROR] Failed to include 'left4lib_concepts', please make sure the 'Left 4 Lib' addon is installed and enabled!\n");
 
 //IncludeScript("left4gpt_requirements");
 
@@ -25,26 +27,29 @@ const LOG_LEVEL_DEBUG = 4;
 	LastInteracted = 0
 	Settings =
 	{
-		// Interval of the process that checks for ChatGPT replies in the OUT files
-		thinker_interval = 0.1
-		
-		// After you activate the bot to talk to with "botname" or "hey botname" at the beginning of the message, that bot remains active
-		// and you don't need to add the bot name in the next messages. But the active bot will reset after this amount of time with no messages.
-		reset_idle_time = 90
-		
-		// The reply is sent to the chat with a delay which is calculated by multiplying the text length by this number in order to "simulate" the bot typing the reply.
-		// Increase/Decrease this number to make the bots reply slower/quicker.
-		msg_delay_factor = 0.045
-		
-		// Minimum L4U user level to be able to chat with the bots (2 = Admin, 1 = Friend, 0 = Random player, -1 = Griefer)
-		min_user_level = 1 // Friend
-		
 		// 0 = No log
 		// 1 = Only [ERROR] messages are logged
 		// 2 = [ERROR] and [WARNING]
 		// 3 = [ERROR], [WARNING] and [INFO]
 		// 4 = [ERROR], [WARNING], [INFO] and [DEBUG]
 		loglevel = 3
+		
+		// Minimum L4U user level to be able to chat with the bots (2 = Admin, 1 = Friend, 0 = Random player, -1 = Griefer)
+		min_user_level = 1 // Friend
+		
+		// The reply is sent to the chat with a delay which is calculated by multiplying the text length by this number in order to "simulate" the bot typing the reply.
+		// Increase/Decrease this number to make the bots reply slower/quicker.
+		// This is for the first line only (which also has the server reply time)
+		msg_delay_factor_first = 0.04
+		// This is for all the other lines (in case of multi line replies)
+		msg_delay_factor_other = 0.09
+		
+		// After you activate the bot to talk to with "botname" or "hey botname" at the beginning of the message, that bot remains active
+		// and you don't need to add the bot name in the next messages. But the active bot will reset after this amount of time with no messages.
+		reset_idle_time = 90
+
+		// Interval of the process that checks for ChatGPT replies in the OUT files
+		thinker_interval = 0.1
 	}
 };
 
@@ -117,7 +122,10 @@ const LOG_LEVEL_DEBUG = 4;
 			Left4GPT.Log(LOG_LEVEL_DEBUG, "txt: " + txt + " - outText: " + outText + " - delay: " + delay);
 			
 			// Pretend the bot is 'typing' the message by adding a delay based on the message length
-			delay += txt.len() * Left4GPT.Settings.msg_delay_factor;
+			if (delay == 0)
+				delay = txt.len() * Left4GPT.Settings.msg_delay_factor_first;
+			else
+				delay += txt.len() * Left4GPT.Settings.msg_delay_factor_other;
 			Left4Timers.AddTimer(null, delay, @(params) Left4GPT.SayText(params.bot, params.text), { bot = bot, text = txt }, false);
 		}
 	}
@@ -194,6 +202,83 @@ Left4Timers.AddThinker("L4GPT", Left4GPT.Settings.thinker_interval, Left4GPT.OnT
 		Left4GPT.Log(LOG_LEVEL_DEBUG, "OnGameEvent_player_say - " + Left4GPT.SelectedBot.GetPlayerName() + " <- " + text);
 		
 		StringToFile("left4gpt/" + Left4GPT.SelectedBot.GetPlayerName().tolower() + "_in.txt", text);
+	}
+}
+
+::Left4GPT.Events.OnGameEvent_round_start <- function (params)
+{
+	Left4GPT.Log(LOG_LEVEL_DEBUG, "OnGameEvent_round_start - MapName: " + Left4Bots.MapName + " - MapNumber: " + Director.GetMapNumber());
+
+	// Apparently, when scriptedmode is enabled and this director option isn't set, there is a big stutter (for the host)
+	// when a witch is chasing a survivor and that survivor enters the saferoom. Simply having a value for this key, removes the stutter
+	if (!("AllowWitchesInCheckpoints" in DirectorScript.GetDirectorOptions()))
+		DirectorScript.GetDirectorOptions().AllowWitchesInCheckpoints <- false;
+
+	::ConceptsHub.SetHandler("Left4GPT", ::Left4GPT.OnConcept.bindenv(::Left4GPT));
+}
+
+::Left4GPT.Events.OnGameEvent_round_end <- function (params)
+{
+	local winner = params["winner"];
+	local reason = params["reason"];
+	local message = params["message"];
+	local time = params["time"];
+
+	Left4GPT.Log(LOG_LEVEL_DEBUG, "OnGameEvent_round_end - winner: " + winner + " - reason: " + reason + " - message: " + message + " - time: " + time);
+
+	::ConceptsHub.RemoveHandler("Left4GPT");
+}
+
+::Left4GPT.Events.OnGameEvent_map_transition <- function (params)
+{
+	Left4GPT.Log(LOG_LEVEL_DEBUG, "OnGameEvent_map_transition");
+
+	::ConceptsHub.RemoveHandler("Left4GPT");
+}
+
+::Left4GPT.OnConcept <- function (concept, query)
+{
+	if (concept == "PlayerExertionMinor" || concept.find("VSLib") != null)
+		return;
+
+	local who = null;
+	if ("userid" in query)
+		who = g_MapScript.GetPlayerFromUserID(query.userid.tointeger());
+	else if ("who" in query)
+		who = Left4Utils.GetSurvivorFromActor(query.who);
+	else if ("Who" in query)
+		who = Left4Utils.GetSurvivorFromActor(query.Who);
+
+	if (!who || !who.IsValid() /*|| !IsPlayerABot(who)*/)
+		return;
+
+	who = who.GetPlayerName();
+
+	local subjectid = null;
+	if ("subjectid" in query)
+		subjectid = query.subjectid.tointeger();
+	
+	local subject = null;
+	if ("subject" in query)
+		subject = query.subject;
+	else if ("Subject" in query)
+		subject = query.Subject;
+
+	if (subjectid != null)
+		subject = g_MapScript.GetPlayerFromUserID(subjectid);
+	else if (subject)
+		subject = Left4Utils.GetSurvivorFromActor(subject);
+	
+	if (subject && subject.IsValid())
+		subject = subject.GetPlayerName();
+
+	Left4GPT.Log(LOG_LEVEL_DEBUG, "OnConcept(" + concept + ") - who: " + who + " - subjectid: " + subjectid + " - subject: " + subject);
+	
+	switch (concept)
+	{
+		case "":
+			//
+			break;
 	}
 }
 
